@@ -313,7 +313,11 @@ func (h *handler) updateSecret(owner runtime.Object, secret *corev1.Secret, dnsN
 		return nil, err
 	}
 	logrus.Infof("@@@@@Checking cert %s for %s/%s", cert.Subject.CommonName, secret.Namespace, secret.Name)
-	if time.Now().Add(24*60*time.Hour).After(cert.NotAfter) ||
+	const (
+		oneYear     = 365 * 24 * time.Hour
+		fiveMinutes = 5 * time.Minute
+	)
+	if time.Now().Add(oneYear-fiveMinutes).After(cert.NotAfter) ||
 		len(cert.DNSNames) == 0 ||
 		!slice.StringsEqual(cert.DNSNames[1:], dnsNames) {
 		newSecret, err := h.createSecret(owner, secret.Namespace, secret.Name, dnsNames)
