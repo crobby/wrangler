@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"strings"
 	"time"
 
@@ -103,6 +104,7 @@ func mutatingWebhookServices(obj *adminregv1.MutatingWebhookConfiguration) (resu
 }
 
 func (h *handler) OnMutationWebhookChange(key string, webhook *adminregv1.MutatingWebhookConfiguration) (*adminregv1.MutatingWebhookConfiguration, error) {
+	logrus.Infof("@@@@@OnMutationWebhookChange %s", key)
 	if webhook == nil {
 		return nil, nil
 	}
@@ -141,6 +143,7 @@ func (h *handler) OnMutationWebhookChange(key string, webhook *adminregv1.Mutati
 }
 
 func (h *handler) OnValidatingWebhookChange(key string, webhook *adminregv1.ValidatingWebhookConfiguration) (*adminregv1.ValidatingWebhookConfiguration, error) {
+	logrus.Infof("@@@@@OnValidatingWebhookChange %s", key)
 	if webhook == nil {
 		return nil, nil
 	}
@@ -179,6 +182,7 @@ func (h *handler) OnValidatingWebhookChange(key string, webhook *adminregv1.Vali
 }
 
 func (h *handler) OnService(key string, service *corev1.Service) (*corev1.Service, error) {
+	logrus.Infof("@@@@@OnService %s", key)
 	if service == nil {
 		return service, nil
 	}
@@ -217,6 +221,7 @@ func (h *handler) OnService(key string, service *corev1.Service) (*corev1.Servic
 }
 
 func (h *handler) OnCRDChange(key string, crd *apiextv1.CustomResourceDefinition) (*apiextv1.CustomResourceDefinition, error) {
+	logrus.Infof("@@@@@OnCRDChange %s", key)
 	if crd == nil || crd.Spec.Conversion == nil || crd.Spec.Conversion.Webhook == nil ||
 		crd.Spec.Conversion.Webhook.ClientConfig == nil ||
 		crd.Spec.Conversion.Webhook.ClientConfig.Service == nil ||
@@ -255,6 +260,7 @@ func (h *handler) generateSecret(service *corev1.Service) (*corev1.Secret, error
 		return nil, nil
 	}
 
+	logrus.Infof("@@@@@Generating secret %s", secretName)
 	lockKey := service.Namespace + "/" + service.Name
 	h.locker.Lock(lockKey)
 	defer h.locker.Unlock(lockKey)
@@ -273,18 +279,23 @@ func (h *handler) generateSecret(service *corev1.Service) (*corev1.Secret, error
 	dnsNames := dnsNameSet.List()
 	secret, err := h.secretsCache.Get(service.Namespace, secretName)
 	if apierror.IsNotFound(err) {
+		logrus.Infof("@@@@@Not found in cache.  Calling Creating secret %s", secretName)
 		secret, err := h.createSecret(service, service.Namespace, secretName, dnsNames)
 		if err != nil {
+			logrus.Errorf("@@@@@Failed to create secret %s: %v", secretName, err)
 			return nil, err
 		}
 		return h.secrets.Create(secret)
 	} else if err != nil {
+		logrus.Errorf("@@@@@Failed to get secret %s: %v", secretName, err)
 		return nil, err
 	}
 
 	if secret, err := h.updateSecret(service, secret, dnsNames); err != nil {
+		logrus.Errorf("@@@@@Failed to update secret %s: %v", secretName, err)
 		return nil, err
 	} else if secret != nil {
+		logrus.Infof("@@@@@In GenerateSecret Updating secret %s", secretName)
 		return h.secrets.Update(secret)
 	}
 
@@ -301,19 +312,20 @@ func (h *handler) updateSecret(owner runtime.Object, secret *corev1.Secret, dnsN
 	if err != nil {
 		return nil, err
 	}
-
+	logrus.Infof("@@@@@Checking cert %s for %s/%s", cert.Subject.CommonName, secret.Namespace, secret.Name)
 	if time.Now().Add(24*60*time.Hour).After(cert.NotAfter) ||
 		len(cert.DNSNames) == 0 ||
 		!slice.StringsEqual(cert.DNSNames[1:], dnsNames) {
 		newSecret, err := h.createSecret(owner, secret.Namespace, secret.Name, dnsNames)
 		if err != nil {
+			logrus.Errorf("@@@@@Failed to create new secret for %s/%s: %v", secret.Namespace, secret.Name, err)
 			return nil, err
 		}
 		secret = secret.DeepCopy()
 		secret.Data = newSecret.Data
 		return secret, nil
 	}
-
+	logrus.Infof("@@@@@Skipping cert %s for %s/%s", cert.Subject.CommonName, secret.Namespace, secret.Name)
 	return nil, nil
 }
 
