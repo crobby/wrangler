@@ -315,12 +315,12 @@ func (h *handler) updateSecret(owner runtime.Object, secret *corev1.Secret, dnsN
 	logrus.Infof("@@@@@Checking cert %s for %s/%s", cert.Subject.CommonName, secret.Namespace, secret.Name)
 	const (
 		oneYear       = 365 * 24 * time.Hour
-		refreshWindow = 1 * time.Hour
+		refreshWindow = 12 * time.Hour
 	)
 	if time.Now().Add(oneYear-refreshWindow).After(cert.NotAfter) ||
 		len(cert.DNSNames) == 0 ||
 		!slice.StringsEqual(cert.DNSNames[1:], dnsNames) {
-		logrus.Infof("@@@@@Cert %s for %s/%s is expiring or missing DNS names, regenerating", cert.Subject.CommonName, secret.Namespace, secret.Name)
+		logrus.Infof("@@@@@Cert %s for %s/%s is expiring or missing DNS names[%s], regenerating", cert.Subject.CommonName, secret.Namespace, secret.Name, strings.Join(dnsNames, ", "))
 		newSecret, err := h.createSecret(owner, secret.Namespace, secret.Name, dnsNames)
 		if err != nil {
 			logrus.Errorf("@@@@@Failed to create new secret for %s/%s: %v", secret.Namespace, secret.Name, err)
