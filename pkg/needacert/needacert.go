@@ -314,10 +314,10 @@ func (h *handler) updateSecret(owner runtime.Object, secret *corev1.Secret, dnsN
 	}
 	logrus.Infof("@@@@@Checking cert %s for %s/%s", cert.Subject.CommonName, secret.Namespace, secret.Name)
 	const (
-		oneYear        = 365 * 24 * time.Hour
-		refreshMinutes = 10 * time.Minute
+		oneYear       = 365 * 24 * time.Hour
+		refreshWindow = 1 * time.Hour
 	)
-	if time.Now().Add(oneYear-refreshMinutes).After(cert.NotAfter) ||
+	if time.Now().Add(oneYear-refreshWindow).After(cert.NotAfter) ||
 		len(cert.DNSNames) == 0 ||
 		!slice.StringsEqual(cert.DNSNames[1:], dnsNames) {
 		logrus.Infof("@@@@@Cert %s for %s/%s is expiring or missing DNS names, regenerating", cert.Subject.CommonName, secret.Namespace, secret.Name)
