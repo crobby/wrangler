@@ -315,7 +315,7 @@ func (h *handler) updateSecret(owner runtime.Object, secret *corev1.Secret, dnsN
 	logrus.Infof("@@@@@Checking cert %s for %s/%s", cert.Subject.CommonName, secret.Namespace, secret.Name)
 	const (
 		oneYear       = 365 * 24 * time.Hour
-		refreshWindow = 12 * time.Hour
+		refreshWindow = 6 * time.Hour
 	)
 	if time.Now().Add(oneYear-refreshWindow).After(cert.NotAfter) ||
 		len(cert.DNSNames) == 0 ||
