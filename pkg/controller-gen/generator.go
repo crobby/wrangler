@@ -1,11 +1,12 @@
 package controllergen
 
 import (
-	"fmt"
+	"bytes"
 	"go/ast"
 	"go/types"
+	"os"
+	"path/filepath"
 	"strings"
-	"unicode"
 
 	"sigs.k8s.io/controller-tools/pkg/genall"
 	"sigs.k8s.io/controller-tools/pkg/loader"
@@ -37,7 +38,20 @@ func (g *WranglerGenerator) CheckFilter() loader.NodeFilter {
 }
 
 func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
+	var boilerplate string
+	if g.Boilerplate != "" {
+		content, err := os.ReadFile(g.Boilerplate)
+		if err != nil {
+			return err
+		}
+		boilerplate = string(content)
+	}
+
+	metadata := &GenerationMetadata{}
+	groups := make(map[string]*GroupMetadata)
+
 	for _, root := range ctx.Roots {
+		root.NeedTypesInfo()
 		pkgMarkers, err := markers.PackageMarkers(ctx.Collector, root)
 		if err != nil {
 			return err
@@ -48,58 +62,157 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		}
 
 		groupName := pkgMarker.(Group).Name
-		fmt.Printf("Generating Wrangler controllers for group: %s (in %s)\n", groupName, root.PkgPath)
+		group, ok := groups[groupName]
+		if !ok {
+			group = &GroupMetadata{
+				Name:        groupName,
+				UpperName:   upperFirst(strings.Split(groupName, ".")[0]),
+				PackageName: strings.ReplaceAll(strings.Split(groupName, ".")[0], "-", ""),
+			}
+			groups[groupName] = group
+		}
+
+		versionName := root.Name
+		version := VersionMetadata{
+			Version:      versionName,
+			VersionUpper: upperFirst(versionName),
+			TypesPkg:     root.PkgPath,
+		}
 
 		err = markers.EachType(ctx.Collector, root, func(info *markers.TypeInfo) {
 			if marker := info.Markers.Get(GenerateMarker.Name); marker != nil {
-				fmt.Printf("  Found type: %s\n", info.Name)
-				// Verification: Check if type info is available
-				if root.TypesInfo != nil {
-					if obj := root.TypesInfo.Defs[info.RawSpec.Name]; obj != nil {
-						if _, ok := obj.Type().Underlying().(*types.Struct); ok {
-							// Successfully parsed struct info
+				typeMetadata := TypeMetadata{
+					Name:        info.Name,
+					LowerName:   lowerFirst(info.Name),
+					Plural:      pluralize(info.Name),
+					PluralLower: strings.ToLower(pluralize(info.Name)),
+					Group:       groupName,
+					Version:     versionName,
+				}
+
+				// Check for namespacing markers
+				typeMetadata.Namespaced = true
+				for _, markerValues := range info.Markers {
+					for _, val := range markerValues {
+						if s, ok := val.(string); ok {
+							if strings.Contains(s, "nonNamespaced") || strings.Contains(s, "scope=Cluster") {
+								typeMetadata.Namespaced = false
+							}
 						}
 					}
 				}
+
+				// Check for Status field
+				if root.TypesInfo != nil {
+					if obj := root.TypesInfo.Defs[info.RawSpec.Name]; obj != nil {
+						if structType, ok := obj.Type().Underlying().(*types.Struct); ok {
+							for i := 0; i < structType.NumFields(); i++ {
+								field := structType.Field(i)
+								if field.Name() == "Status" {
+									typeMetadata.HasStatus = true
+									typeMetadata.StatusType = field.Type().String()
+									if strings.Contains(typeMetadata.StatusType, ".") {
+										parts := strings.Split(typeMetadata.StatusType, ".")
+										typeMetadata.StatusType = parts[len(parts)-1]
+									}
+									break
+								}
+							}
+						}
+					}
+				}
+
+				version.Types = append(version.Types, typeMetadata)
 			}
 		})
 		if err != nil {
 			return err
 		}
+
+		if len(version.Types) > 0 {
+			version.ControllerPkg = filepath.Join(g.OutputPackage, "controllers", group.PackageName, versionName)
+			group.Versions = append(group.Versions, version)
+		}
 	}
+
+	for _, group := range groups {
+		metadata.Groups = append(metadata.Groups, *group)
+	}
+
+	if len(metadata.Groups) == 0 {
+		return nil
+	}
+
+	for _, group := range metadata.Groups {
+		groupDir := filepath.Join("pkg", "generated", "controllers", group.PackageName)
+		if err := os.MkdirAll(groupDir, 0755); err != nil {
+			return err
+		}
+
+		// Generate group interface.go
+		var buf bytes.Buffer
+		data := struct {
+			GroupMetadata
+			Boilerplate string
+		}{
+			GroupMetadata: group,
+			Boilerplate:   boilerplate,
+		}
+		if err := groupInterfaceTemplate.Execute(&buf, data); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(groupDir, "interface.go"), buf.Bytes(), 0644); err != nil {
+			return err
+		}
+
+		for _, version := range group.Versions {
+			versionDir := filepath.Join(groupDir, version.Version)
+			if err := os.MkdirAll(versionDir, 0755); err != nil {
+				return err
+			}
+
+			// Generate version interface.go
+			buf.Reset()
+			data := struct {
+				VersionMetadata
+				Boilerplate string
+			}{
+				VersionMetadata: version,
+				Boilerplate:     boilerplate,
+			}
+			if err := versionInterfaceTemplate.Execute(&buf, data); err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(versionDir, "interface.go"), buf.Bytes(), 0644); err != nil {
+				return err
+			}
+
+			for _, t := range version.Types {
+				// Generate type.go
+				buf.Reset()
+				data := struct {
+					TypeMetadata
+					Boilerplate string
+					TypesPkg    string
+				}{
+					TypeMetadata: t,
+					Boilerplate:  boilerplate,
+					TypesPkg:     version.TypesPkg,
+				}
+				if err := typeTemplate.Execute(&buf, data); err != nil {
+					return err
+				}
+				fileName := strings.ToLower(t.Name) + ".go"
+				if err := os.WriteFile(filepath.Join(versionDir, fileName), buf.Bytes(), 0644); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
 func (g *WranglerGenerator) Help() *markers.Definition {
 	return markers.Must(markers.MakeDefinition("wrangler", markers.DescribesPackage, WranglerGenerator{}))
-}
-
-// Utility functions for string manipulation
-func upperFirst(s string) string {
-	if s == "" {
-		return ""
-	}
-	r := []rune(s)
-	r[0] = unicode.ToUpper(r[0])
-	return string(r)
-}
-
-func lowerFirst(s string) string {
-	if s == "" {
-		return ""
-	}
-	r := []rune(s)
-	r[0] = unicode.ToLower(r[0])
-	return string(r)
-}
-
-func pluralize(name string) string {
-	// Basic pluralization for now, will refine in later phases
-	if strings.HasSuffix(name, "s") {
-		return name
-	}
-	if strings.HasSuffix(name, "y") {
-		return name[:len(name)-1] + "ies"
-	}
-	return name + "s"
 }

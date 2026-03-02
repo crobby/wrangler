@@ -15,8 +15,12 @@ func main() {
 	}
 	roots := os.Args[1:]
 
-	var g genall.Generator = &controllergen.WranglerGenerator{}
-	allGenerators := genall.Generators{&g}
+	g := &controllergen.WranglerGenerator{
+		OutputPackage: "github.com/rancher/wrangler/v3/pkg/generated",
+		Boilerplate:   "scripts/boilerplate.go.txt",
+	}
+	var gen genall.Generator = g
+	allGenerators := genall.Generators{&gen}
 
 	// In a full implementation, we'd use genall.FromOptions for more complex
 	// flags, but for now we manually set up the runtime with our roots.
@@ -25,9 +29,17 @@ func main() {
 		fmt.Printf("Error setting up runtime: %v\n", err)
 		os.Exit(1)
 	}
+	runtime.ErrorWriter = os.Stderr
 
-	if !runtime.Run() {
+	if runtime.Run() {
 		fmt.Println("Generation failed")
+		for _, root := range runtime.Roots {
+			if len(root.Errors) > 0 {
+				for _, err := range root.Errors {
+					fmt.Printf("Error in package %s: %v\n", root.PkgPath, err)
+				}
+			}
+		}
 		os.Exit(1)
 	}
 

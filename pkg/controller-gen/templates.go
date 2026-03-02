@@ -1,0 +1,281 @@
+package controllergen
+
+import "text/template"
+
+var (
+	typeTemplate = template.Must(template.New("type").Parse(`
+{{.Boilerplate}}
+package {{.Version}}
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/rancher/wrangler/v3/pkg/apply"
+	"github.com/rancher/lasso/pkg/controller"
+	"github.com/rancher/wrangler/v3/pkg/condition"
+	"github.com/rancher/wrangler/v3/pkg/schemes"
+	"github.com/rancher/wrangler/v3/pkg/generic"
+	"github.com/rancher/wrangler/v3/pkg/kv"
+	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
+	{{.Version}} "{{.TypesPkg}}"
+)
+
+// {{.Name}}Controller interface for managing {{.Name}} resources.
+type {{.Name}}Controller interface {
+    generic.{{ if not .Namespaced}}NonNamespaced{{end}}ControllerInterface[*{{.Version}}.{{.Name}}, *{{.Version}}.{{.Name}}List]
+}
+
+// {{.Name}}Client interface for managing {{.Name}} resources in Kubernetes.
+type {{.Name}}Client interface {
+	generic.{{ if not .Namespaced}}NonNamespaced{{end}}ClientInterface[*{{.Version}}.{{.Name}}, *{{.Version}}.{{.Name}}List]
+}
+
+// {{.Name}}Cache interface for retrieving {{.Name}} resources in memory.
+type {{.Name}}Cache interface {
+	generic.{{ if not .Namespaced}}NonNamespaced{{end}}CacheInterface[*{{.Version}}.{{.Name}}]
+}
+
+{{ if .HasStatus -}}
+// {{.Name}}StatusHandler is executed for every added or modified {{.Name}}. Should return the new status to be updated
+type {{.Name}}StatusHandler func(obj *{{.Version}}.{{.Name}}, status {{.Version}}.{{.StatusType}}) ({{.Version}}.{{.StatusType}}, error)
+
+// {{.Name}}GeneratingHandler is the top-level handler that is executed for every {{.Name}} event. It extends {{.Name}}StatusHandler by a returning a slice of child objects to be passed to apply.Apply
+type {{.Name}}GeneratingHandler func(obj *{{.Version}}.{{.Name}}, status {{.Version}}.{{.StatusType}}) ([]runtime.Object, {{.Version}}.{{.StatusType}}, error)
+
+// Register{{.Name}}StatusHandler configures a {{.Name}}Controller to execute a {{.Name}}StatusHandler for every events observed.
+// If a non-empty condition is provided, it will be updated in the status conditions for every handler execution
+func Register{{.Name}}StatusHandler(ctx context.Context, controller {{.Name}}Controller, condition condition.Cond, name string, handler {{.Name}}StatusHandler) {
+	statusHandler := &{{.LowerName}}StatusHandler{
+		client:    controller,
+		condition: condition,
+		handler:   handler,
+	}
+	controller.AddGenericHandler(ctx, name, generic.FromObjectHandlerToHandler(statusHandler.sync))
+}
+
+// Register{{.Name}}GeneratingHandler configures a {{.Name}}Controller to execute a {{.Name}}GeneratingHandler for every events observed, passing the returned objects to the provided apply.Apply.
+// If a non-empty condition is provided, it will be updated in the status conditions for every handler execution
+func Register{{.Name}}GeneratingHandler(ctx context.Context, controller {{.Name}}Controller, apply apply.Apply,
+	condition condition.Cond, name string, handler {{.Name}}GeneratingHandler, opts *generic.GeneratingHandlerOptions) {
+	statusHandler := &{{.LowerName}}GeneratingHandler{
+		{{.Name}}GeneratingHandler: handler,
+		apply:                            apply,
+		name:                             name,
+		gvk:                              controller.GroupVersionKind(),
+	}
+	if opts != nil {
+		statusHandler.opts = *opts
+	}
+	controller.OnChange(ctx, name, statusHandler.Remove)
+	Register{{.Name}}StatusHandler(ctx, controller, condition, name, statusHandler.Handle)
+}
+
+type {{.LowerName}}StatusHandler struct {
+	client    {{.Name}}Client
+	condition condition.Cond
+	handler   {{.Name}}StatusHandler
+}
+
+// sync is executed on every resource addition or modification. Executes the configured handlers and sends the updated status to the Kubernetes API
+func (a *{{.LowerName}}StatusHandler) sync(key string, obj *{{.Version}}.{{.Name}}) (*{{.Version}}.{{.Name}}, error) {
+	if obj == nil {
+		return obj, nil
+	}
+
+	origStatus := obj.Status.DeepCopy()
+	obj = obj.DeepCopy()
+	newStatus, err := a.handler(obj, obj.Status)
+	if err != nil {
+		// Revert to old status on error
+		newStatus = *origStatus.DeepCopy()
+	}
+
+	if a.condition != "" {
+		if errors.IsConflict(err) {
+			a.condition.SetError(&newStatus, "", nil)
+		} else {
+			a.condition.SetError(&newStatus, "", err)
+		}
+	}
+	if !equality.Semantic.DeepEqual(origStatus, &newStatus) {
+		if a.condition != "" {
+			// Since status has changed, update the lastUpdatedTime
+			a.condition.LastUpdated(&newStatus, time.Now().UTC().Format(time.RFC3339))
+		}
+
+		var newErr error
+		obj.Status = newStatus
+		newObj, newErr := a.client.UpdateStatus(obj)
+		if err == nil {
+			err = newErr
+		}
+		if newErr == nil {
+			obj = newObj
+		}
+	}
+	return obj, err
+}
+
+type {{.LowerName}}GeneratingHandler struct {
+	{{.Name}}GeneratingHandler
+	apply      apply.Apply
+	opts       generic.GeneratingHandlerOptions
+	gvk        schema.GroupVersionKind
+	name       string
+	seen       sync.Map
+}
+
+// Remove handles the observed deletion of a resource, cascade deleting every associated resource previously applied
+func (a *{{.LowerName}}GeneratingHandler) Remove(key string, obj *{{.Version}}.{{.Name}}) (*{{.Version}}.{{.Name}}, error) {
+	if obj != nil {
+		return obj, nil
+	}
+
+	obj = &{{.Version}}.{{.Name}}{}
+	obj.Namespace, obj.Name = kv.RSplit(key, "/")
+	obj.SetGroupVersionKind(a.gvk)
+
+	if a.opts.UniqueApplyForResourceVersion {
+		a.seen.Delete(key)
+	}
+
+	return nil, generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
+		WithOwner(obj).
+		WithSetID(a.name).
+		ApplyObjects()
+}
+
+// Handle executes the configured {{.Name}}GeneratingHandler and pass the resulting objects to apply.Apply, finally returning the new status of the resource
+func (a *{{.LowerName}}GeneratingHandler) Handle(obj *{{.Version}}.{{.Name}}, status {{.Version}}.{{.StatusType}}) ({{.Version}}.{{.StatusType}}, error) {
+	if !obj.DeletionTimestamp.IsZero() {
+		return status, nil
+	}
+
+	objs, newStatus, err := a.{{.Name}}GeneratingHandler(obj, status)
+	if err != nil {
+		return newStatus, err
+	}
+	if !a.isNewResourceVersion(obj) {
+	    return newStatus, nil
+	}
+
+	err = generic.ConfigureApplyForObject(a.apply, obj, &a.opts).
+		WithOwner(obj).
+		WithSetID(a.name).
+		ApplyObjects(objs...)
+	if err != nil {
+		return newStatus, err
+	}
+	a.storeResourceVersion(obj)
+	return newStatus, nil
+}
+
+// isNewResourceVersion detects if a specific resource version was already successfully processed. 
+// Only used if UniqueApplyForResourceVersion is set in generic.GeneratingHandlerOptions
+func (a *{{.LowerName}}GeneratingHandler) isNewResourceVersion(obj *{{.Version}}.{{.Name}}) bool {
+	if !a.opts.UniqueApplyForResourceVersion {
+		return true
+	}
+
+	// Apply once per resource version
+	key := obj.Namespace + "/" + obj.Name
+	previous, ok := a.seen.Load(key)
+	return !ok || previous != obj.ResourceVersion
+}
+
+// storeResourceVersion keeps track of the latest resource version of an object for which Apply was executed
+// Only used if UniqueApplyForResourceVersion is set in generic.GeneratingHandlerOptions
+func (a *{{.LowerName}}GeneratingHandler) storeResourceVersion(obj *{{.Version}}.{{.Name}}) {
+	if !a.opts.UniqueApplyForResourceVersion {
+		return
+	}
+
+	key := obj.Namespace + "/" + obj.Name
+	a.seen.Store(key, obj.ResourceVersion)
+}
+{{- end }}
+`))
+
+	versionInterfaceTemplate = template.Must(template.New("version").Parse(`
+{{.Boilerplate}}
+package {{.Version}}
+
+import (
+	"github.com/rancher/lasso/pkg/controller"
+	"github.com/rancher/wrangler/v3/pkg/generic"
+	"github.com/rancher/wrangler/v3/pkg/schemes"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	{{.Version}} "{{.TypesPkg}}"
+)
+
+func init() {
+	schemes.Register({{.Version}}.AddToScheme)
+}
+
+type Interface interface {
+	{{- range .Types }}
+	{{.Name}}() {{.Name}}Controller
+	{{- end }}
+}
+
+func New(controllerFactory controller.SharedControllerFactory) Interface {
+	return &version{
+		controllerFactory: controllerFactory,
+	}
+}
+
+type version struct {
+	controllerFactory controller.SharedControllerFactory
+}
+
+{{ range .Types }}
+func (v *version) {{.Name}}() {{.Name}}Controller {
+	return generic.New{{ if not .Namespaced}}NonNamespaced{{end}}Controller[*{{.Version}}.{{.Name}}, *{{.Version}}.{{.Name}}List](schema.GroupVersionKind{Group: "{{.Group}}", Version: "{{.Version}}", Kind: "{{.Name}}"}, "{{.PluralLower}}", {{ if .Namespaced}}true, {{end}}v.controllerFactory)
+}
+{{ end }}
+`))
+
+	groupInterfaceTemplate = template.Must(template.New("group").Parse(`
+{{.Boilerplate}}
+package {{.PackageName}}
+
+import (
+	"github.com/rancher/lasso/pkg/controller"
+	"github.com/rancher/wrangler/v3/pkg/generic"
+	{{- range .Versions }}
+	"{{.ControllerPkg}}"
+	{{- end }}
+)
+
+type Interface interface {
+	{{- range .Versions }}
+	{{.VersionUpper}}() {{.Version}}.Interface
+	{{- end }}
+}
+
+func New(controllerFactory controller.SharedControllerFactory) Interface {
+	return &group{
+		controllerFactory: controllerFactory,
+	}
+}
+
+type group struct {
+	controllerFactory controller.SharedControllerFactory
+}
+
+{{ range .Versions }}
+func (g *group) {{.VersionUpper}}() {{.Version}}.Interface {
+	return {{.Version}}.New(g.controllerFactory)
+}
+{{ end }}
+`))
+)
