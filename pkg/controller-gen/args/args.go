@@ -1,15 +1,9 @@
 package args
 
-import (
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/gengo/v2/types"
-)
-
 type CustomArgs struct {
 	// Package is the directory path where generated code output will be located
 	Package       string
 	ImportPackage string
-	TypesByGroup  map[schema.GroupVersion][]*types.Name
 	Options       Options
 	OutputBase    string
 	// BoilerplateContent is the actual boilerplate content that has been

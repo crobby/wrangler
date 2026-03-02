@@ -8,11 +8,12 @@ type GenerationMetadata struct {
 }
 
 type GroupMetadata struct {
-	Name            string
-	UpperName       string
-	PackageName     string
-	Versions        []VersionMetadata
-	ControllerPkg   string
+	Name              string
+	UpperName         string
+	PackageName       string
+	CustomPackageName string
+	Versions          []VersionMetadata
+	ControllerPkg     string
 }
 
 type VersionMetadata struct {

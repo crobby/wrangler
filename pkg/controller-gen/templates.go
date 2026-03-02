@@ -252,7 +252,7 @@ import (
 	"github.com/rancher/lasso/pkg/controller"
 	"github.com/rancher/wrangler/v3/pkg/generic"
 	{{- range .Versions }}
-	"{{.ControllerPkg}}"
+	{{.Version}} "{{.ControllerPkg}}"
 	{{- end }}
 )
 

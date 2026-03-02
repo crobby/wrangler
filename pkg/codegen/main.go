@@ -20,7 +20,7 @@ import (
 func main() {
 	controllergen.Run(args.Options{
 		ImportPackage: "github.com/rancher/wrangler/v3/pkg/generated",
-		OutputPackage: "github.com/rancher/wrangler/pkg/generated",
+		OutputPackage: "github.com/rancher/wrangler/v3/pkg/generated",
 		Boilerplate:   "scripts/boilerplate.go.txt",
 		Groups: map[string]args.Group{
 			v1.GroupName: {
@@ -39,17 +39,19 @@ func main() {
 					v1.LimitRange{},
 					v1.ResourceQuota{},
 				},
+				OutputControllerPackageName: "core",
 			},
 			discoveryv1.GroupName: {
 				Types: []interface{}{
 					discoveryv1.EndpointSlice{},
 				},
-				OutputControllerPackageName: "discovery",
+				OutputControllerPackageName: "discovery.k8s.io",
 			},
 			extensionsv1beta1.GroupName: {
 				Types: []interface{}{
 					extensionsv1beta1.Ingress{},
 				},
+				OutputControllerPackageName: "extensions",
 			},
 			rbacv1.GroupName: {
 				Types: []interface{}{
@@ -66,9 +68,10 @@ func main() {
 					appsv1.DaemonSet{},
 					appsv1.StatefulSet{},
 				},
+				OutputControllerPackageName: "apps",
 			},
 			storagev1.GroupName: {
-				OutputControllerPackageName: "storage",
+				OutputControllerPackageName: "storage.k8s.io",
 				Types: []interface{}{
 					storagev1.StorageClass{},
 				},
@@ -77,32 +80,38 @@ func main() {
 				Types: []interface{}{
 					apiextv1.CustomResourceDefinition{},
 				},
+				OutputControllerPackageName: "apiextensions.k8s.io",
 			},
 			apiv1.GroupName: {
 				Types: []interface{}{
 					apiv1.APIService{},
 				},
+				OutputControllerPackageName: "apiregistration.k8s.io",
 			},
 			batchv1.GroupName: {
 				Types: []interface{}{
 					batchv1.Job{},
 				},
+				OutputControllerPackageName: "batch",
 			},
 			networkingv1.GroupName: {
 				Types: []interface{}{
 					networkingv1.NetworkPolicy{},
 				},
+				OutputControllerPackageName: "networking.k8s.io",
 			},
 			admissionregistrationv1.GroupName: {
 				Types: []interface{}{
 					admissionregistrationv1.ValidatingWebhookConfiguration{},
 					admissionregistrationv1.MutatingWebhookConfiguration{},
 				},
+				OutputControllerPackageName: "admissionregistration.k8s.io",
 			},
 			coordinationv1.GroupName: {
 				Types: []interface{}{
 					coordinationv1.Lease{},
 				},
+				OutputControllerPackageName: "coordination.k8s.io",
 			},
 		},
 	})

@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-tools/pkg/genall"
 	"sigs.k8s.io/controller-tools/pkg/loader"
 	"sigs.k8s.io/controller-tools/pkg/markers"
+
+	"github.com/rancher/wrangler/v3/pkg/controller-gen/args"
 )
 
 // WranglerGenerator is a genall.Generator that produces Wrangler controllers.
@@ -21,6 +23,8 @@ type WranglerGenerator struct {
 	OutputPackage string `marker:"outputPackage,optional"`
 	// Boilerplate is the path to a file containing the Go header boilerplate.
 	Boilerplate string `marker:"boilerplate,optional"`
+	// ManualGroups allows specifying groups and types manually instead of via markers.
+	ManualGroups map[string]args.Group
 }
 
 func (g *WranglerGenerator) RegisterMarkers(into *markers.Registry) error {
@@ -61,6 +65,12 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 	metadata := &GenerationMetadata{}
 	groups := make(map[string]*GroupMetadata)
 
+	if len(g.ManualGroups) > 0 {
+		if err := g.collectManualMetadata(ctx, groups, metadata); err != nil {
+			return err
+		}
+	}
+
 	for _, root := range ctx.Roots {
 		if ctx.Checker != nil {
 			ctx.Checker.Check(root)
@@ -77,16 +87,25 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		}
 
 		groupName := pkgMarker.(Group).Name
+		customPkg := pkgMarker.(Group).PackageName
 		metadata.GenerateClientset = metadata.GenerateClientset || pkgMarkers.Get(ClientsetMarker.Name) != nil
 		metadata.GenerateListers = metadata.GenerateListers || pkgMarkers.Get(ListersMarker.Name) != nil
 		metadata.GenerateInformers = metadata.GenerateInformers || pkgMarkers.Get(InformersMarker.Name) != nil
 
 		group, ok := groups[groupName]
 		if !ok {
+			pkgName := customPkg
+			if pkgName == "" {
+				pkgName = strings.ReplaceAll(groupName, "-", "")
+				if pkgName == "" {
+					pkgName = "core"
+				}
+			}
 			group = &GroupMetadata{
-				Name:        groupName,
-				UpperName:   upperFirst(strings.Split(groupName, ".")[0]),
-				PackageName: strings.ReplaceAll(strings.Split(groupName, ".")[0], "-", ""),
+				Name:              groupName,
+				UpperName:         upperFirst(pkgName),
+				PackageName:       pkgName,
+				CustomPackageName: customPkg,
 			}
 			groups[groupName] = group
 		}
@@ -150,6 +169,8 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 
 		if len(version.Types) > 0 {
 			version.ControllerPkg = filepath.Join(g.OutputPackage, "controllers", group.PackageName, versionName)
+			version.Version = versionName
+			version.VersionUpper = upperFirst(versionName)
 			group.Versions = append(group.Versions, version)
 		}
 	}
@@ -180,15 +201,16 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		if err := groupInterfaceTemplate.Execute(&buf, data); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(groupDir, "interface.go"), buf.Bytes(), 0644); err != nil {
+		groupInterfacePath := filepath.Join(groupDir, "interface.go")
+		if err := os.MkdirAll(filepath.Dir(groupInterfacePath), 0755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(groupInterfacePath, buf.Bytes(), 0644); err != nil {
 			return err
 		}
 
 		for _, version := range group.Versions {
 			versionDir := filepath.Join(groupDir, version.Version)
-			if err := os.MkdirAll(versionDir, 0755); err != nil {
-				return err
-			}
 
 			// Generate version interface.go
 			buf.Reset()
@@ -202,7 +224,11 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 			if err := versionInterfaceTemplate.Execute(&buf, data); err != nil {
 				return err
 			}
-			if err := os.WriteFile(filepath.Join(versionDir, "interface.go"), buf.Bytes(), 0644); err != nil {
+			versionInterfacePath := filepath.Join(versionDir, "interface.go")
+			if err := os.MkdirAll(filepath.Dir(versionInterfacePath), 0755); err != nil {
+				return err
+			}
+			if err := os.WriteFile(versionInterfacePath, buf.Bytes(), 0644); err != nil {
 				return err
 			}
 
@@ -222,7 +248,11 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 					return err
 				}
 				fileName := strings.ToLower(t.Name) + ".go"
-				if err := os.WriteFile(filepath.Join(versionDir, fileName), buf.Bytes(), 0644); err != nil {
+				typeFilePath := filepath.Join(versionDir, fileName)
+				if err := os.MkdirAll(filepath.Dir(typeFilePath), 0755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(typeFilePath, buf.Bytes(), 0644); err != nil {
 					return err
 				}
 			}
