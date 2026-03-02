@@ -24,6 +24,7 @@ require (
 	k8s.io/kube-aggregator v0.35.0
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
 	sigs.k8s.io/cli-utils v0.37.2
+	sigs.k8s.io/controller-tools v0.17.0
 )
 
 require (
