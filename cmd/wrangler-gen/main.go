@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/rancher/wrangler/v3/pkg/controller-gen"
+	"sigs.k8s.io/controller-tools/pkg/crd"
+	"sigs.k8s.io/controller-tools/pkg/deepcopy"
 	"sigs.k8s.io/controller-tools/pkg/genall"
 )
 
@@ -15,12 +17,16 @@ func main() {
 	}
 	roots := os.Args[1:]
 
-	g := &controllergen.WranglerGenerator{
-		OutputPackage: "github.com/rancher/wrangler/v3/pkg/generated",
-		Boilerplate:   "scripts/boilerplate.go.txt",
-	}
-	var gen genall.Generator = g
-	allGenerators := genall.Generators{&gen}
+	var (
+		wranglerGen genall.Generator = &controllergen.WranglerGenerator{
+			OutputPackage: "github.com/rancher/wrangler/v3/pkg/generated",
+			Boilerplate:   "scripts/boilerplate.go.txt",
+		}
+		deepcopyGen genall.Generator = &deepcopy.Generator{}
+		crdGen      genall.Generator = &crd.Generator{}
+	)
+	
+	allGenerators := genall.Generators{&wranglerGen, &deepcopyGen, &crdGen}
 
 	// In a full implementation, we'd use genall.FromOptions for more complex
 	// flags, but for now we manually set up the runtime with our roots.
@@ -30,6 +36,11 @@ func main() {
 		os.Exit(1)
 	}
 	runtime.ErrorWriter = os.Stderr
+	runtime.OutputRules = genall.OutputRules{
+		Default: genall.OutputArtifacts{
+			Config: genall.OutputToDirectory("pkg/crds"),
+		},
+	}
 
 	if runtime.Run() {
 		fmt.Println("Generation failed")

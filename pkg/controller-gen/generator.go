@@ -51,7 +51,11 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 	groups := make(map[string]*GroupMetadata)
 
 	for _, root := range ctx.Roots {
-		root.NeedTypesInfo()
+		if ctx.Checker != nil {
+			ctx.Checker.Check(root)
+		} else {
+			root.NeedTypesInfo()
+		}
 		pkgMarkers, err := markers.PackageMarkers(ctx.Collector, root)
 		if err != nil {
 			return err
