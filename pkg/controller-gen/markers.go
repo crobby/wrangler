@@ -32,7 +32,8 @@ type Generate struct {
 
 // Group is the type that corresponds to the +wrangler:group marker.
 type Group struct {
-	Name string `marker:"name"`
+	Name        string `marker:"name"`
+	PackageName string `marker:"packageName,optional"`
 }
 
 // Clientset is the type that corresponds to the +wrangler:generate:clientset marker.
