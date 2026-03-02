@@ -217,6 +217,16 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 			return err
 		}
 
+		// Generate factory.go
+		buf.Reset()
+		if err := factoryTemplate.Execute(&buf, data); err != nil {
+			return err
+		}
+		factoryPath := filepath.Join(groupDir, "factory.go")
+		if err := osWriteFile(factoryPath, buf.Bytes()); err != nil {
+			return err
+		}
+
 		for _, version := range group.Versions {
 			versionDir := filepath.Join(groupDir, version.Version)
 

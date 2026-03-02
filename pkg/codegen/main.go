@@ -80,13 +80,13 @@ func main() {
 				Types: []interface{}{
 					apiextv1.CustomResourceDefinition{},
 				},
-				OutputControllerPackageName: "apiextensions",
+				OutputControllerPackageName: "apiextensions.k8s.io",
 			},
 			apiv1.GroupName: {
 				Types: []interface{}{
 					apiv1.APIService{},
 				},
-				OutputControllerPackageName: "apiregistration",
+				OutputControllerPackageName: "apiregistration.k8s.io",
 			},
 			batchv1.GroupName: {
 				Types: []interface{}{
@@ -98,20 +98,20 @@ func main() {
 				Types: []interface{}{
 					networkingv1.NetworkPolicy{},
 				},
-				OutputControllerPackageName: "networking",
+				OutputControllerPackageName: "networking.k8s.io",
 			},
 			admissionregistrationv1.GroupName: {
 				Types: []interface{}{
 					admissionregistrationv1.ValidatingWebhookConfiguration{},
 					admissionregistrationv1.MutatingWebhookConfiguration{},
 				},
-				OutputControllerPackageName: "admissionregistration",
+				OutputControllerPackageName: "admissionregistration.k8s.io",
 			},
 			coordinationv1.GroupName: {
 				Types: []interface{}{
 					coordinationv1.Lease{},
 				},
-				OutputControllerPackageName: "coordination",
+				OutputControllerPackageName: "coordination.k8s.io",
 			},
 		},
 	})
