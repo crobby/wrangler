@@ -2,9 +2,11 @@ package controllergen
 
 import (
 	"bytes"
+	"fmt"
 	"go/ast"
 	"go/types"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -26,6 +28,15 @@ func (g *WranglerGenerator) RegisterMarkers(into *markers.Registry) error {
 		return err
 	}
 	if err := into.Register(GroupMarker); err != nil {
+		return err
+	}
+	if err := into.Register(ClientsetMarker); err != nil {
+		return err
+	}
+	if err := into.Register(ListersMarker); err != nil {
+		return err
+	}
+	if err := into.Register(InformersMarker); err != nil {
 		return err
 	}
 	return nil
@@ -66,6 +77,10 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		}
 
 		groupName := pkgMarker.(Group).Name
+		metadata.GenerateClientset = metadata.GenerateClientset || pkgMarkers.Get(ClientsetMarker.Name) != nil
+		metadata.GenerateListers = metadata.GenerateListers || pkgMarkers.Get(ListersMarker.Name) != nil
+		metadata.GenerateInformers = metadata.GenerateInformers || pkgMarkers.Get(InformersMarker.Name) != nil
+
 		group, ok := groups[groupName]
 		if !ok {
 			group = &GroupMetadata{
@@ -214,7 +229,70 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		}
 	}
 
+	if metadata.GenerateClientset {
+		if err := g.runExternalGenerator("client-gen", metadata, "--clientset-name", "versioned", "--input-base", "", "--clientset-only=false"); err != nil {
+			return err
+		}
+	}
+	if metadata.GenerateListers {
+		if err := g.runExternalGenerator("lister-gen", metadata); err != nil {
+			return err
+		}
+	}
+	if metadata.GenerateInformers {
+		if err := g.runExternalGenerator("informer-gen", metadata, "--versioned-clientset-package", filepath.Join(g.OutputPackage, "clientset/versioned"), "--listers-package", filepath.Join(g.OutputPackage, "listers")); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+func (g *WranglerGenerator) runExternalGenerator(name string, metadata *GenerationMetadata, extraArgs ...string) error {
+	fmt.Printf("Invoking external generator: %s\n", name)
+	// Base command
+	args := []string{"run", "k8s.io/code-generator/cmd/" + name}
+	
+	var inputPkgs []string
+	for _, group := range metadata.Groups {
+		for _, version := range group.Versions {
+			// For newer k8s generators, we pass the package path as positional argument
+			inputPkgs = append(inputPkgs, version.TypesPkg)
+		}
+	}
+
+	outputBase := "pkg/generated"
+	outputPkg := g.OutputPackage + "/" + name + "s"
+	var cmdArgs []string
+	if strings.HasSuffix(name, "-gen") {
+		stem := strings.TrimSuffix(name, "-gen")
+		outputPkg = g.OutputPackage + "/" + stem + "s"
+		cmdArgs = []string{
+			"--output-pkg", outputPkg,
+			"--output-dir", filepath.Join(outputBase, stem+"s"),
+		}
+	}
+	if name == "client-gen" {
+		outputPkg = g.OutputPackage + "/clientset"
+		cmdArgs = []string{
+			"--output-pkg", outputPkg,
+			"--output-dir", filepath.Join(outputBase, "clientset"),
+		}
+	}
+
+	if g.Boilerplate != "" {
+		cmdArgs = append(cmdArgs, "--go-header-file", g.Boilerplate)
+	}
+	cmdArgs = append(cmdArgs, extraArgs...)
+	cmdArgs = append(cmdArgs, inputPkgs...)
+
+	fullArgs := append(args, cmdArgs...)
+
+	cmd := exec.Command("/usr/local/go/bin/go", fullArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	fmt.Printf("Running: go %s\n", strings.Join(fullArgs, " "))
+	return cmd.Run()
 }
 
 func (g *WranglerGenerator) Help() *markers.Definition {

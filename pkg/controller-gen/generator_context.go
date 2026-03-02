@@ -1,7 +1,10 @@
 package controllergen
 
 type GenerationMetadata struct {
-	Groups []GroupMetadata
+	Groups            []GroupMetadata
+	GenerateClientset bool
+	GenerateListers   bool
+	GenerateInformers bool
 }
 
 type GroupMetadata struct {
