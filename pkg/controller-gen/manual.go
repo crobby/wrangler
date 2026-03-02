@@ -43,7 +43,7 @@ func (g *WranglerGenerator) collectManualMetadata(ctx *genall.GenerationContext,
 				}
 				group = &GroupMetadata{
 					Name:              groupName,
-					UpperName:         upperFirst(pkgName),
+					UpperName:         upperFirst(strings.ReplaceAll(pkgName, ".", "")),
 					PackageName:       pkgName,
 					CustomPackageName: manualGroup.OutputControllerPackageName,
 				}

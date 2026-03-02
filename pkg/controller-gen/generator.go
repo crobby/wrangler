@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/tools/imports"
 	"sigs.k8s.io/controller-tools/pkg/genall"
 	"sigs.k8s.io/controller-tools/pkg/loader"
 	"sigs.k8s.io/controller-tools/pkg/markers"
@@ -103,7 +104,7 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 			}
 			group = &GroupMetadata{
 				Name:              groupName,
-				UpperName:         upperFirst(pkgName),
+				UpperName:         upperFirst(strings.ReplaceAll(pkgName, ".", "")),
 				PackageName:       pkgName,
 				CustomPackageName: customPkg,
 			}
@@ -183,11 +184,21 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		return nil
 	}
 
-	for _, group := range metadata.Groups {
-		groupDir := filepath.Join("pkg", "generated", "controllers", group.PackageName)
-		if err := os.MkdirAll(groupDir, 0755); err != nil {
+	osWriteFile := func(path string, data []byte) error {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
+		formatted, err := imports.Process(path, data, nil)
+		if err != nil {
+			// If formatting fails, write the original data so we can debug it
+			os.WriteFile(path, data, 0644)
+			return fmt.Errorf("failed to format %s: %w", path, err)
+		}
+		return os.WriteFile(path, formatted, 0644)
+	}
+
+	for _, group := range metadata.Groups {
+		groupDir := filepath.Join("pkg", "generated", "controllers", group.PackageName)
 
 		// Generate group interface.go
 		var buf bytes.Buffer
@@ -202,10 +213,7 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 			return err
 		}
 		groupInterfacePath := filepath.Join(groupDir, "interface.go")
-		if err := os.MkdirAll(filepath.Dir(groupInterfacePath), 0755); err != nil {
-			return err
-		}
-		if err := os.WriteFile(groupInterfacePath, buf.Bytes(), 0644); err != nil {
+		if err := osWriteFile(groupInterfacePath, buf.Bytes()); err != nil {
 			return err
 		}
 
@@ -225,10 +233,7 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 				return err
 			}
 			versionInterfacePath := filepath.Join(versionDir, "interface.go")
-			if err := os.MkdirAll(filepath.Dir(versionInterfacePath), 0755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(versionInterfacePath, buf.Bytes(), 0644); err != nil {
+			if err := osWriteFile(versionInterfacePath, buf.Bytes()); err != nil {
 				return err
 			}
 
@@ -249,10 +254,7 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 				}
 				fileName := strings.ToLower(t.Name) + ".go"
 				typeFilePath := filepath.Join(versionDir, fileName)
-				if err := os.MkdirAll(filepath.Dir(typeFilePath), 0755); err != nil {
-					return err
-				}
-				if err := os.WriteFile(typeFilePath, buf.Bytes(), 0644); err != nil {
+				if err := osWriteFile(typeFilePath, buf.Bytes()); err != nil {
 					return err
 				}
 			}

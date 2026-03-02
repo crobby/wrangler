@@ -1,9 +1,15 @@
 package controllergen
 
-import "text/template"
+import (
+	"strings"
+	"text/template"
+)
 
 var (
-	typeTemplate = template.Must(template.New("type").Parse(`
+	funcs = template.FuncMap{
+		"replace": strings.ReplaceAll,
+	}
+	typeTemplate = template.Must(template.New("type").Funcs(funcs).Parse(`
 {{.Boilerplate}}
 package {{.Version}}
 
@@ -205,7 +211,7 @@ func (a *{{.LowerName}}GeneratingHandler) storeResourceVersion(obj *{{.Version}}
 {{- end }}
 `))
 
-	versionInterfaceTemplate = template.Must(template.New("version").Parse(`
+	versionInterfaceTemplate = template.Must(template.New("version").Funcs(funcs).Parse(`
 {{.Boilerplate}}
 package {{.Version}}
 
@@ -244,9 +250,9 @@ func (v *version) {{.Name}}() {{.Name}}Controller {
 {{ end }}
 `))
 
-	groupInterfaceTemplate = template.Must(template.New("group").Parse(`
+	groupInterfaceTemplate = template.Must(template.New("group").Funcs(funcs).Parse(`
 {{.Boilerplate}}
-package {{.PackageName}}
+package {{ replace .PackageName "." "" }}
 
 import (
 	"github.com/rancher/lasso/pkg/controller"
