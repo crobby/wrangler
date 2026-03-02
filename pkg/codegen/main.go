@@ -45,7 +45,7 @@ func main() {
 				Types: []interface{}{
 					discoveryv1.EndpointSlice{},
 				},
-				OutputControllerPackageName: "discovery.k8s.io",
+				OutputControllerPackageName: "discovery",
 			},
 			extensionsv1beta1.GroupName: {
 				Types: []interface{}{
@@ -71,7 +71,7 @@ func main() {
 				OutputControllerPackageName: "apps",
 			},
 			storagev1.GroupName: {
-				OutputControllerPackageName: "storage.k8s.io",
+				OutputControllerPackageName: "storage",
 				Types: []interface{}{
 					storagev1.StorageClass{},
 				},
@@ -80,13 +80,13 @@ func main() {
 				Types: []interface{}{
 					apiextv1.CustomResourceDefinition{},
 				},
-				OutputControllerPackageName: "apiextensions.k8s.io",
+				OutputControllerPackageName: "apiextensions",
 			},
 			apiv1.GroupName: {
 				Types: []interface{}{
 					apiv1.APIService{},
 				},
-				OutputControllerPackageName: "apiregistration.k8s.io",
+				OutputControllerPackageName: "apiregistration",
 			},
 			batchv1.GroupName: {
 				Types: []interface{}{
@@ -98,20 +98,20 @@ func main() {
 				Types: []interface{}{
 					networkingv1.NetworkPolicy{},
 				},
-				OutputControllerPackageName: "networking.k8s.io",
+				OutputControllerPackageName: "networking",
 			},
 			admissionregistrationv1.GroupName: {
 				Types: []interface{}{
 					admissionregistrationv1.ValidatingWebhookConfiguration{},
 					admissionregistrationv1.MutatingWebhookConfiguration{},
 				},
-				OutputControllerPackageName: "admissionregistration.k8s.io",
+				OutputControllerPackageName: "admissionregistration",
 			},
 			coordinationv1.GroupName: {
 				Types: []interface{}{
 					coordinationv1.Lease{},
 				},
-				OutputControllerPackageName: "coordination.k8s.io",
+				OutputControllerPackageName: "coordination",
 			},
 		},
 	})
