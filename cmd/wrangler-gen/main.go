@@ -49,8 +49,6 @@ func main() {
 		gens = append(gens, &crdGen)
 	}
 
-	// In a full implementation, we'd use genall.FromOptions for more complex
-	// flags, but for now we manually set up the runtime with our roots.
 	runtime, err := gens.ForRoots(roots...)
 	if err != nil {
 		fmt.Printf("Error setting up runtime: %v\n", err)

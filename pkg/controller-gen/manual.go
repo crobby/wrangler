@@ -16,8 +16,6 @@ func (g *WranglerGenerator) collectManualMetadata(ctx *genall.GenerationContext,
 		metadata.GenerateInformers = metadata.GenerateInformers || manualGroup.GenerateInformers
 
 		for _, obj := range manualGroup.Types {
-			// Basic translation from object instance to metadata
-			// This mimics args.ObjectsToGroupVersion logic
 			var (
 				pkgName string
 				typeName string
@@ -69,7 +67,6 @@ func (g *WranglerGenerator) collectManualMetadata(ctx *genall.GenerationContext,
 				version = &group.Versions[len(group.Versions)-1]
 			}
 
-			// Add type metadata
 			typeMetadata := TypeMetadata{
 				Name:        typeName,
 				LowerName:   lowerFirst(typeName),
@@ -79,10 +76,6 @@ func (g *WranglerGenerator) collectManualMetadata(ctx *genall.GenerationContext,
 				Version:     versionName,
 			}
 
-			// Since we don't have markers for these manual types easily accessible here
-			// without reloading the packages, we'll make some assumptions or 
-			// just mark them all as namespaced for now.
-			// Ideally we would use the loader to get real info.
 			typeMetadata.Namespaced = true 
 			
 			version.Types = append(version.Types, typeMetadata)

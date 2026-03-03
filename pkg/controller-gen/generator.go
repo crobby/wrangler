@@ -129,7 +129,6 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 					Version:     versionName,
 				}
 
-				// Check for namespacing markers
 				typeMetadata.Namespaced = true
 				for _, markerValues := range info.Markers {
 					for _, val := range markerValues {
@@ -141,7 +140,6 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 					}
 				}
 
-				// Check for Status field
 				if root.TypesInfo != nil {
 					if obj := root.TypesInfo.Defs[info.RawSpec.Name]; obj != nil {
 						if structType, ok := obj.Type().Underlying().(*types.Struct); ok {
@@ -200,7 +198,6 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 	for _, group := range metadata.Groups {
 		groupDir := filepath.Join("pkg", "generated", "controllers", group.PackageName)
 
-		// Generate group interface.go
 		var buf bytes.Buffer
 		data := struct {
 			GroupMetadata
@@ -217,7 +214,6 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 			return err
 		}
 
-		// Generate factory.go
 		buf.Reset()
 		if err := factoryTemplate.Execute(&buf, data); err != nil {
 			return err
@@ -230,7 +226,6 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 		for _, version := range group.Versions {
 			versionDir := filepath.Join(groupDir, version.Version)
 
-			// Generate version interface.go
 			buf.Reset()
 			data := struct {
 				VersionMetadata
@@ -248,7 +243,6 @@ func (g *WranglerGenerator) Generate(ctx *genall.GenerationContext) error {
 			}
 
 			for _, t := range version.Types {
-				// Generate type.go
 				buf.Reset()
 				data := struct {
 					TypeMetadata
@@ -333,7 +327,6 @@ func (g *WranglerGenerator) runExternalGenerator(name string, metadata *Generati
 	cmd := exec.Command("/usr/local/go/bin/go", fullArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	fmt.Printf("Running: go %s\n", strings.Join(fullArgs, " "))
 	return cmd.Run()
 }
 

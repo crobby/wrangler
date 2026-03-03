@@ -52,7 +52,6 @@ func Run(opts args.Options) {
 	}
 	runtime.ErrorWriter = os.Stderr
 	
-	// Only set OutputRules if we actually have something to output to Config
 	if generateOpenAPI {
 		runtime.OutputRules = genall.OutputRules{
 			Default: genall.OutputArtifacts{
